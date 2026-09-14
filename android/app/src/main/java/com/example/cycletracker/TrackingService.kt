@@ -89,7 +89,7 @@ class TrackingService : LifecycleService() {
     }
 
     private fun startNewTrack() {
-        lifecycleScope().launch {
+        lifecycleScope.launch {
             val track = TrackEntity(startedAt = System.currentTimeMillis(), state = TrackEntity.STATE_RUNNING)
             currentTrackId = db.trackDao().insertTrack(track)
             lastPoint = null
@@ -112,20 +112,20 @@ class TrackingService : LifecycleService() {
         liveState.postValue(TrackEntity.STATE_PAUSED)
         fusedClient.removeLocationUpdates(locationCallback)
         updateNotification("Pauza", liveDistanceM.value ?: 0.0)
-        lifecycleScope().launch { updateTrackState(TrackEntity.STATE_PAUSED) }
+        lifecycleScope.launch { updateTrackState(TrackEntity.STATE_PAUSED) }
     }
 
     private fun resumeTrack() {
         liveState.postValue(TrackEntity.STATE_RUNNING)
         lastLocationTime = System.currentTimeMillis()
         startLocationUpdates()
-        lifecycleScope().launch { updateTrackState(TrackEntity.STATE_RUNNING) }
+        lifecycleScope.launch { updateTrackState(TrackEntity.STATE_RUNNING) }
     }
 
     private fun stopTrack() {
         fusedClient.removeLocationUpdates(locationCallback)
         val trackId = currentTrackId
-        lifecycleScope().launch {
+        lifecycleScope.launch {
             val track = db.trackDao().getTrack(trackId)
             if (track != null) {
                 track.state = TrackEntity.STATE_FINISHED
@@ -151,7 +151,7 @@ class TrackingService : LifecycleService() {
         if (liveState.value != TrackEntity.STATE_RUNNING) return
 
         val now = System.currentTimeMillis()
-        lifecycleScope().launch {
+        lifecycleScope.launch {
             val point = TrackPointEntity(
                 trackId = currentTrackId,
                 timestamp = now,
@@ -265,7 +265,4 @@ class TrackingService : LifecycleService() {
         val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
         return r * c
     }
-
-    // LifecycleService uz ma vlastni lifecycleScope, tohle je jen prehledny alias
-    private fun lifecycleScope() = this.lifecycleScope
-}
+} 
