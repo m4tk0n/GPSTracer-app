@@ -18,8 +18,8 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Nastav Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Over dostupnost Android SDK (uz je na runneru predinstalovane)
+        run: echo "ANDROID_HOME=$ANDROID_HOME"
 
       - name: Nastav Gradle
         uses: gradle/actions/setup-gradle@v4
