@@ -1,9 +1,0 @@
-keystore.properties
-*.keystore
-!debug.keystore
-*.jks
-local.properties
-.gradle/
-build/
-app/build/
-*.apk
