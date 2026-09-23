@@ -1,43 +1,38 @@
 package cz.example.gpstracker
 
 import android.Manifest
-import android.content.Context
 import android.content.pm.PackageManager
-import android.location.LocationManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import android.content.Intent
-import android.net.Uri
-import android.provider.Settings
-import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import org.maplibre.android.camera.CameraPosition
+import org.maplibre.android.location.LocationComponentActivationOptions
+import org.maplibre.android.location.modes.CameraMode
+import org.maplibre.android.location.modes.RenderMode
+import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapView
+import org.maplibre.android.maps.Style
+
+private const val MAP_STYLE_URL =
+    "https://tiles.openfreemap.org/styles/liberty"
 
 class MainActivity : ComponentActivity() {
 
@@ -47,248 +42,159 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         setContent {
-            GPSTrackerApp()
+            GpsTrackerMapScreen()
         }
     }
 }
 
 @Composable
-fun GPSTrackerApp() {
+private fun GpsTrackerMapScreen() {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
 
-    var errorMessage by remember {
-        mutableStateOf<String?>(null)
+    var hasLocationPermission by remember {
+        mutableStateOf(
+            hasLocationPermission(context)
+        )
     }
 
-    val locationPermissionLauncher =
+    val permissionLauncher =
         rememberLauncherForActivityResult(
             contract = ActivityResultContracts.RequestMultiplePermissions()
         ) {
-            errorMessage = getLocationError(context)
+            hasLocationPermission = hasLocationPermission(context)
         }
 
-    fun openAppSettings() {
-        val intent = Intent(
-            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-            Uri.parse("package:${context.packageName}")
-        )
-        context.startActivity(intent)
-    }
-
-    fun checkLocation() {
-        errorMessage = getLocationError(context)
-    }
-
-    fun requestLocationPermission() {
-        locationPermissionLauncher.launch(
-            arrayOf(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            )
-        )
-    }
-
     LaunchedEffect(Unit) {
-        checkLocation()
+        if (!hasLocationPermission) {
+            permissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
     }
 
-    MaterialTheme {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                MainContent(
-                    onTestError = {
-                        errorMessage = "Testovací chyba aplikace."
-                    },
-                    onCheckLocation = {
-                        checkLocation()
-                    },
-                    onRequestPermission = {
-                        requestLocationPermission()
-                    },
-                    onOpenSettings = {
-                        openAppSettings()
-                    }
-                )
+    val mapView = remember {
+        MapView(context)
+    }
 
-                errorMessage?.let { message ->
-                    ErrorBanner(
-                        message = message,
-                        onClose = {
-                            errorMessage = null
-                        },
-                        onRequestPermission = {
-                            requestLocationPermission()
-                        },
-                        onOpenSettings = {
-                            openAppSettings()
-                        },
-                        modifier = Modifier.align(Alignment.TopCenter)
-                    )
+    DisposableEffect(lifecycleOwner, mapView) {
+        val lifecycleObserver = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> mapView.onStart()
+                Lifecycle.Event.ON_RESUME -> mapView.onResume()
+                Lifecycle.Event.ON_PAUSE -> mapView.onPause()
+                Lifecycle.Event.ON_STOP -> mapView.onStop()
+                Lifecycle.Event.ON_DESTROY -> mapView.onDestroy()
+                else -> Unit
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(lifecycleObserver)
+            mapView.onDestroy()
+        }
+    }
+
+    AndroidView(
+        modifier = Modifier.fillMaxSize(),
+        factory = {
+            mapView.apply {
+                onCreate(null)
+
+                getMapAsync { mapLibreMap ->
+                    mapLibreMap.setStyle(
+                        Style.Builder()
+                            .fromUri(MAP_STYLE_URL)
+                    ) { style ->
+                        mapLibreMap.setCameraPosition(
+                            CameraPosition.Builder()
+                                .zoom(15.0)
+                                .build()
+                        )
+
+                        if (hasLocationPermission(context)) {
+                            enableUserLocation(
+                                mapLibreMap = mapLibreMap,
+                                style = style,
+                                mapView = this
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        update = {
+            if (hasLocationPermission) {
+                it.getMapAsync { mapLibreMap ->
+                    mapLibreMap.getStyle { style ->
+                        if (style != null) {
+                            enableUserLocation(
+                                mapLibreMap = mapLibreMap,
+                                style = style,
+                                mapView = it
+                            )
+                        }
+                    }
                 }
             }
         }
-    }
+    )
 }
 
+private fun enableUserLocation(
+    mapLibreMap: MapLibreMap,
+    style: Style,
+    mapView: MapView
+) {
+    if (!hasLocationPermission(mapView.context)) {
+        return
+    }
 
-private fun getLocationError(context: Context): String? {
-    val hasFineLocationPermission =
+    val locationComponent = mapLibreMap.locationComponent
+
+    val activationOptions =
+        LocationComponentActivationOptions
+            .builder(mapView.context, style)
+            .useDefaultLocationEngine(true)
+            .build()
+
+    locationComponent.activateLocationComponent(activationOptions)
+    locationComponent.isLocationComponentEnabled = true
+
+    /*
+     * TRACKING_COMPASS:
+     * - mapa sleduje aktuální polohu,
+     * - mapa se natáčí podle směru telefonu.
+     */
+    locationComponent.cameraMode = CameraMode.TRACKING_COMPASS
+
+    /*
+     * COMPASS:
+     * - zobrazí směrovou šipku,
+     * - MapLibre zpracuje chvění kompasu.
+     */
+    locationComponent.renderMode = RenderMode.COMPASS
+
+    locationComponent.zoomWhileTracking(15.0)
+}
+
+private fun hasLocationPermission(context: android.content.Context): Boolean {
+    val fineLocationGranted =
         ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
 
-    val hasCoarseLocationPermission =
+    val coarseLocationGranted =
         ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
 
-    if (!hasFineLocationPermission && !hasCoarseLocationPermission) {
-        return "Aplikace nemá povolení k poloze."
-    }
-
-    val hasBackgroundLocationPermission =
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.ACCESS_BACKGROUND_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true
-        }
-
-    if (!hasBackgroundLocationPermission) {
-        return "Pro sledování na pozadí povolte polohu vždy v nastavení."
-    }
-
-    val locationManager =
-        context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-
-    val gpsEnabled = try {
-        locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
-    } catch (_: Exception) {
-        false
-    }
-
-    val networkEnabled = try {
-        locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
-    } catch (_: Exception) {
-        false
-    }
-
-    if (!gpsEnabled && !networkEnabled) {
-        return "Poloha zařízení je vypnutá."
-    }
-
-    return null
-}
-
-@Composable
-private fun MainContent(
-    onTestError: () -> Unit,
-    onCheckLocation: () -> Unit,
-    onRequestPermission: () -> Unit,
-    onOpenSettings: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            text = "GPS Tracker",
-            style = MaterialTheme.typography.headlineMedium
-        )
-
-        Text(
-            text = "Základní verze aplikace",
-            modifier = Modifier.padding(top = 8.dp)
-        )
-
-        Button(
-            onClick = onRequestPermission,
-            modifier = Modifier.padding(top = 24.dp)
-        ) {
-            Text(text = "Povolit polohu")
-        }
-
-        Button(
-            onClick = onOpenSettings,
-            modifier = Modifier.padding(top = 12.dp)
-        ) {
-            Text(text = "Nastavit používání polohy")
-        }
-
-        Button(
-            onClick = onCheckLocation,
-            modifier = Modifier.padding(top = 12.dp)
-        ) {
-            Text(text = "Zkontrolovat GPS")
-        }
-
-        Button(
-            onClick = onTestError,
-            modifier = Modifier.padding(top = 12.dp)
-        ) {
-            Text(text = "Otestovat chybový pruh")
-        }
-    }
-}
-
-@Composable
-private fun ErrorBanner(
-    message: String,
-    onClose: () -> Unit,
-    onRequestPermission: () -> Unit,
-    onOpenSettings: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(Color(0xFFD32F2F))
-            .padding(
-                start = 16.dp,
-                top = 12.dp,
-                end = 8.dp,
-                bottom = 12.dp
-            ),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = message,
-            color = Color.White,
-            modifier = Modifier.weight(1f)
-        )
-
-        if (message.contains("povolení")) {
-            Button(
-                onClick = onRequestPermission
-            ) {
-                Text(text = "Povolit")
-            }
-        }
-
-        if (message.contains("vždy")) {
-            Button(
-                onClick = onOpenSettings
-            ) {
-                Text(text = "Nastavení")
-            }
-        }
-
-        Button(
-            onClick = onClose
-        ) {
-            Text(text = "Zavřít")
-        }
-    }
+    return fineLocationGranted || coarseLocationGranted
 }
