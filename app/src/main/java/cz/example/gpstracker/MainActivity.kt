@@ -34,6 +34,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.compose.runtime.LaunchedEffect
 
 class MainActivity : ComponentActivity() {
 
@@ -62,6 +66,14 @@ fun GPSTrackerApp() {
         ) {
             errorMessage = getLocationError(context)
         }
+
+    fun openAppSettings() {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.parse("package:${context.packageName}")
+        )
+        context.startActivity(intent)
+    }
 
     fun checkLocation() {
         errorMessage = getLocationError(context)
@@ -97,6 +109,9 @@ fun GPSTrackerApp() {
                     },
                     onRequestPermission = {
                         requestLocationPermission()
+                    },
+                    onOpenSettings = {
+                        openAppSettings()
                     }
                 )
 
@@ -109,6 +124,9 @@ fun GPSTrackerApp() {
                         onRequestPermission = {
                             requestLocationPermission()
                         },
+                        onOpenSettings = {
+                            openAppSettings()
+                        },
                         modifier = Modifier.align(Alignment.TopCenter)
                     )
                 }
@@ -116,6 +134,7 @@ fun GPSTrackerApp() {
         }
     }
 }
+
 
 private fun getLocationError(context: Context): String? {
     val hasFineLocationPermission =
@@ -132,6 +151,20 @@ private fun getLocationError(context: Context): String? {
 
     if (!hasFineLocationPermission && !hasCoarseLocationPermission) {
         return "Aplikace nemá povolení k poloze."
+    }
+
+    val hasBackgroundLocationPermission =
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+
+    if (!hasBackgroundLocationPermission) {
+        return "Pro sledování na pozadí povolte polohu vždy v nastavení."
     }
 
     val locationManager =
@@ -160,7 +193,8 @@ private fun getLocationError(context: Context): String? {
 private fun MainContent(
     onTestError: () -> Unit,
     onCheckLocation: () -> Unit,
-    onRequestPermission: () -> Unit
+    onRequestPermission: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -187,6 +221,13 @@ private fun MainContent(
         }
 
         Button(
+            onClick = onOpenSettings,
+            modifier = Modifier.padding(top = 12.dp)
+        ) {
+            Text(text = "Nastavit používání polohy")
+        }
+
+        Button(
             onClick = onCheckLocation,
             modifier = Modifier.padding(top = 12.dp)
         ) {
@@ -207,6 +248,7 @@ private fun ErrorBanner(
     message: String,
     onClose: () -> Unit,
     onRequestPermission: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -232,6 +274,14 @@ private fun ErrorBanner(
                 onClick = onRequestPermission
             ) {
                 Text(text = "Povolit")
+            }
+        }
+
+        if (message.contains("vždy")) {
+            Button(
+                onClick = onOpenSettings
+            ) {
+                Text(text = "Nastavení")
             }
         }
 
