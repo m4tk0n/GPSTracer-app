@@ -1,37 +1,31 @@
-name: Build APK
+name: Build Android APK
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:   # umoznuje spustit build rucne tlacitkem na GitHubu
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Stáhni kód repozitáře
+      - name: Stažení zdrojových souborů
         uses: actions/checkout@v4
 
-      - name: Nastav JDK 17
+      - name: Nastavení Javy
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: temurin
+          java-version: "17"
 
-      - name: Over dostupnost Android SDK (uz je na runneru predinstalovane)
-        run: echo "ANDROID_HOME=$ANDROID_HOME"
+      - name: Nastavení Gradle
+        uses: gradle/actions/setup-gradle@v3
 
-      - name: Nastav Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.7'
+      - name: Sestavení APK
+        run: gradle assembleDebug
 
-      - name: Sestav debug APK
-        working-directory: android
-        run: gradle assembleDebug --no-daemon
-
-      - name: Nahraj APK jako výstup buildu (ke stažení)
+      - name: Uložení APK
         uses: actions/upload-artifact@v4
         with:
-          name: tracer-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: gps-tracker-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
