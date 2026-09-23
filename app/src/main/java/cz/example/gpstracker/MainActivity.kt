@@ -23,13 +23,13 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import org.maplibre.android.camera.CameraPosition
-import org.maplibre.android.location.LocationComponentActivationOptions
-import org.maplibre.android.location.modes.CameraMode
-import org.maplibre.android.location.modes.RenderMode
-import org.maplibre.android.maps.MapLibreMap
-import org.maplibre.android.maps.MapView
-import org.maplibre.android.maps.Style
+import com.mapbox.mapboxsdk.camera.CameraPosition
+import com.mapbox.mapboxsdk.location.LocationComponentActivationOptions
+import com.mapbox.mapboxsdk.location.modes.CameraMode
+import com.mapbox.mapboxsdk.location.modes.RenderMode
+import com.mapbox.mapboxsdk.maps.MapLibreMap
+import com.mapbox.mapboxsdk.maps.MapView
+import com.mapbox.mapboxsdk.maps.Style
 
 private const val MAP_STYLE_URL =
     "https://tiles.openfreemap.org/styles/liberty"
